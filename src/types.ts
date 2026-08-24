@@ -28,4 +28,10 @@ export type GroceryItem = {
   recipeId?: string;
 };
 
-export type ScreenName = 'home' | 'recipes' | 'recipe-detail' | 'new-recipe' | 'grocery';
+export type ScreenName =
+  | 'home'
+  | 'recipes'
+  | 'recipe-detail'
+  | 'recipe-edit'
+  | 'new-recipe'
+  | 'grocery';
