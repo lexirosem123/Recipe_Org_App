@@ -213,19 +213,28 @@ function HomeScreen({
         {groceryItems.length === 0 && <Text style={styles.muted}>Your grocery list is empty.</Text>}
       </Pressable>
 
-      <SectionTitle title="On The Menu" action="All recipes" onPress={onRecipes} />
-      <View style={styles.card}>
-        {menuRecipes.length === 0 && <Text style={styles.muted}>Add a recipe to your menu to see it here.</Text>}
-        {menuRecipes.map((recipe) => (
-          <View key={recipe.id} style={styles.menuRow}>
-            <Pressable style={styles.menuRemove} onPress={() => onRemoveMenu(recipe.id)}>
-              <Text style={styles.menuRemoveText}>×</Text>
-            </Pressable>
-            <Pressable style={styles.menuRecipeTap} onPress={() => onRecipe(recipe.id)}>
-              <Text style={styles.listText}>{recipe.name}</Text>
-              <Text style={styles.muted}> | {recipe.cookTime}</Text>
-            </Pressable>
+      <SectionTitle title="On The Menu" action="All recipes →" onPress={onRecipes} />
+      <View style={styles.menuGrid}>
+        {menuRecipes.length === 0 && (
+          <View style={styles.card}>
+            <Text style={styles.muted}>Add a recipe to your menu to see it here.</Text>
           </View>
+        )}
+        {menuRecipes.map((recipe) => (
+          <Pressable key={recipe.id} style={styles.menuRecipeCard} onPress={() => onRecipe(recipe.id)}>
+            <Pressable
+              hitSlop={10}
+              style={styles.menuCardRemove}
+              onPress={() => onRemoveMenu(recipe.id)}
+            >
+              <Text style={styles.menuCardRemoveText}>×</Text>
+            </Pressable>
+            <View style={styles.imagePlaceholder}>
+              <Text style={styles.imagePlaceholderText}>Recipe Image</Text>
+            </View>
+            <Text style={styles.recipeName}>{recipe.name}</Text>
+            <Text style={styles.muted}>{recipe.cookTime}</Text>
+          </Pressable>
         ))}
       </View>
     </ScrollView>
@@ -524,7 +533,7 @@ const styles = StyleSheet.create({
   profileCircle: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#d4d4d1', alignItems: 'center', justifyContent: 'center' },
   profileIcon: { fontSize: 24, color: '#333' },
 
-  actionRow: { flexDirection: 'row', gap: 12, marginTop: 18, marginBottom: 28 },
+  actionRow: { flexDirection: 'row', gap: 12, marginTop: 18, marginBottom: 6 },
   primaryAction: { flex: 1, minHeight: 112, backgroundColor: '#222', borderRadius: 18, padding: 18, justifyContent: 'space-between' },
   secondaryAction: { flex: 1, minHeight: 112, backgroundColor: '#e5e5e2', borderRadius: 18, padding: 18, justifyContent: 'space-between' },
   actionPlus: { fontSize: 32, color: '#333' },
@@ -543,10 +552,11 @@ const styles = StyleSheet.create({
   checkmark: { color: '#fff', fontSize: 12, fontWeight: '800' },
   completedText: { textDecorationLine: 'line-through', color: '#999' },
 
-  menuRow: { flexDirection: 'row', alignItems: 'center', minHeight: 48, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  menuRemove: { width: 32, height: 32, borderRadius: 9, backgroundColor: '#e4e4e1', alignItems: 'center', justifyContent: 'center', marginRight: 8 },
-  menuRemoveText: { fontSize: 22, color: '#555' },
-  menuRecipeTap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+  menuGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  menuRecipeCard: { width: '48%', backgroundColor: '#fff', borderRadius: 18, padding: 12, position: 'relative' },
+  menuCardRemove: { position: 'absolute', top: 8, right: 8, zIndex: 2, width: 30, height: 30, borderRadius: 15, backgroundColor: '#e4e4e1', alignItems: 'center', justifyContent: 'center' },
+  menuCardRemoveText: { fontSize: 20, color: '#555', marginTop: -1 },
+  imagePlaceholder: { height: 86, borderRadius: 14, backgroundColor: '#ddd', alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
 
   searchRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 22, marginBottom: 12 },
   searchInput: { flex: 1, marginBottom: 0 },
