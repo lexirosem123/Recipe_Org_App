@@ -17,6 +17,8 @@ export type Recipe = {
   cookTime: string;
   favorite: boolean;
   onMenu?: boolean;
+  coverPhotoUri?: string;
+  emoji?: string;
   ingredients: Ingredient[];
   steps: RecipeStep[];
 };
