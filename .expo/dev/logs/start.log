@@ -5,3 +5,5 @@
 {"_e":"metro:config","_t":1787559692684,"serverRoot":"../../..","projectRoot":"../../..","exporting":false,"flags":{"autolinkingModuleResolution":false,"serverActions":false,"serverComponents":false,"reactCompiler":false,"optimizeGraph":false,"treeshaking":false,"logbox":false}}
 {"_e":"expo:dev-tools-plugin:load","_t":1787559693166,"plugins":[]}
 {"_e":"metro:instantiate","_t":1787559693743,"atlas":false,"workers":3,"host":"::","port":8081}
+{"_e":"metro:client_log","_t":1787559823937,"level":"error","data":["Project is incompatible with this version of Expo Go\n\nThis project requires a newer version of Expo Go.\n\nHow to fix this error:\nDownload the latest version of Expo Go from the Play Store."]}
+{"_e":"metro:client_log","_t":1787559893790,"level":"error","data":["Project is incompatible with this version of Expo Go\n\nThis project requires a newer version of Expo Go.\n\nHow to fix this error:\nDownload the latest version of Expo Go from the Play Store."]}
