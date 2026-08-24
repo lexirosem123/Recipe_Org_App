@@ -32,8 +32,15 @@ export type GroceryItem = {
   recipeId?: string;
 };
 
+export type UserProfile = {
+  name: string;
+  email: string;
+  photoUri?: string;
+};
+
 export type ScreenName =
   | 'home'
+  | 'profile'
   | 'recipes'
   | 'recipe-detail'
   | 'recipe-edit'
