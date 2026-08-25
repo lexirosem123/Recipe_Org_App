@@ -1,5 +1,5 @@
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Pressable,
   SafeAreaView,
@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import { initialGroceryItems, sampleRecipes } from './src/sampleData';
-import { GroceryItem, Recipe, ScreenName } from './src/types';
+import { GroceryItem, Ingredient, Recipe, RecipeStep, ScreenName } from './src/types';
 
 const makeId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
@@ -19,45 +19,84 @@ export default function App() {
   const [recipes, setRecipes] = useState<Recipe[]>(sampleRecipes);
   const [groceryItems, setGroceryItems] = useState<GroceryItem[]>(initialGroceryItems);
   const [selectedRecipeId, setSelectedRecipeId] = useState(sampleRecipes[0].id);
+  const [menuRecipeIds, setMenuRecipeIds] = useState<string[]>([sampleRecipes[0].id]);
 
   const selectedRecipe = recipes.find((recipe) => recipe.id === selectedRecipeId) ?? recipes[0];
+  const menuRecipes = menuRecipeIds
+    .map((id) => recipes.find((recipe) => recipe.id === id))
+    .filter((recipe): recipe is Recipe => Boolean(recipe));
 
   const openRecipe = (id: string) => {
     setSelectedRecipeId(id);
     setScreen('recipe-detail');
   };
 
-  const addRecipeIngredients = (recipe: Recipe) => {
-    const additions = recipe.ingredients.map((ingredient) => ({
-      id: makeId(),
-      name: ingredient.name,
-      quantity: ingredient.quantity,
-      unit: ingredient.unit,
-      completed: false,
-      recipeId: recipe.id,
-    }));
-    setGroceryItems((current) => [...current, ...additions]);
-    setScreen('grocery');
+  const addToMenu = (recipe: Recipe) => {
+    if (!menuRecipeIds.includes(recipe.id)) {
+      setMenuRecipeIds((current) => [...current, recipe.id]);
+    }
+
+    setGroceryItems((current) => {
+      const existing = new Set(current.map((item) => item.name.toLowerCase()));
+      const additions = recipe.ingredients
+        .filter((ingredient) => !existing.has(ingredient.name.toLowerCase()))
+        .map((ingredient) => ({
+          id: makeId(),
+          name: ingredient.name,
+          quantity: ingredient.quantity,
+          unit: ingredient.unit,
+          completed: false,
+          recipeId: recipe.id,
+        }));
+      return [...current, ...additions];
+    });
+
+    setScreen('home');
+  };
+
+  const removeFromMenu = (id: string) => {
+    setMenuRecipeIds((current) => current.filter((recipeId) => recipeId !== id));
+  };
+
+  const saveRecipe = (recipe: Recipe) => {
+    setRecipes((current) => {
+      const exists = current.some((item) => item.id === recipe.id);
+      return exists
+        ? current.map((item) => (item.id === recipe.id ? recipe : item))
+        : [recipe, ...current];
+    });
+    setSelectedRecipeId(recipe.id);
+    setScreen('recipe-detail');
+  };
+
+  const deleteRecipe = (id: string) => {
+    setRecipes((current) => current.filter((recipe) => recipe.id !== id));
+    setMenuRecipeIds((current) => current.filter((recipeId) => recipeId !== id));
+    setScreen('recipes');
   };
 
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="dark" />
+
       {screen === 'home' && (
         <HomeScreen
-          recipes={recipes}
           groceryItems={groceryItems}
+          menuRecipes={menuRecipes}
           onNewRecipe={() => setScreen('new-recipe')}
           onRecipes={() => setScreen('recipes')}
           onGrocery={() => setScreen('grocery')}
           onRecipe={openRecipe}
+          onRemoveMenu={removeFromMenu}
         />
       )}
+
       {screen === 'recipes' && (
         <RecipesScreen
           recipes={recipes}
           onBack={() => setScreen('home')}
           onRecipe={openRecipe}
+          onNewRecipe={() => setScreen('new-recipe')}
           onToggleFavorite={(id) =>
             setRecipes((current) =>
               current.map((recipe) =>
@@ -67,23 +106,34 @@ export default function App() {
           }
         />
       )}
+
       {screen === 'recipe-detail' && selectedRecipe && (
         <RecipeDetailScreen
           recipe={selectedRecipe}
           onBack={() => setScreen('recipes')}
-          onAddToGrocery={() => addRecipeIngredients(selectedRecipe)}
+          onEdit={() => setScreen('recipe-edit')}
+          onAddToMenu={() => addToMenu(selectedRecipe)}
         />
       )}
+
+      {screen === 'recipe-edit' && selectedRecipe && (
+        <RecipeEditorScreen
+          mode="edit"
+          recipe={selectedRecipe}
+          onBack={() => setScreen('recipe-detail')}
+          onSave={saveRecipe}
+          onDelete={() => deleteRecipe(selectedRecipe.id)}
+        />
+      )}
+
       {screen === 'new-recipe' && (
-        <NewRecipeScreen
+        <RecipeEditorScreen
+          mode="new"
           onBack={() => setScreen('home')}
-          onSave={(recipe) => {
-            setRecipes((current) => [recipe, ...current]);
-            setSelectedRecipeId(recipe.id);
-            setScreen('recipe-detail');
-          }}
+          onSave={saveRecipe}
         />
       )}
+
       {screen === 'grocery' && (
         <GroceryScreen
           items={groceryItems}
@@ -112,25 +162,31 @@ function PageHeader({ title, onBack }: { title: string; onBack?: () => void }) {
 }
 
 function HomeScreen({
-  recipes,
   groceryItems,
+  menuRecipes,
   onNewRecipe,
   onRecipes,
   onGrocery,
   onRecipe,
+  onRemoveMenu,
 }: {
-  recipes: Recipe[];
   groceryItems: GroceryItem[];
+  menuRecipes: Recipe[];
   onNewRecipe: () => void;
   onRecipes: () => void;
   onGrocery: () => void;
   onRecipe: (id: string) => void;
+  onRemoveMenu: (id: string) => void;
 }) {
   return (
     <ScrollView contentContainerStyle={styles.page}>
-      <Text style={styles.eyebrow}>RECIPE ORGANIZER</Text>
-      <Text style={styles.heroTitle}>Good Morning!</Text>
-      <Text style={styles.muted}>What are we making today?</Text>
+      <View style={styles.greetingCard}>
+        <View>
+          <Text style={styles.heroTitle}>Good Morning!</Text>
+          <Text style={styles.muted}>What are we cooking up today?</Text>
+        </View>
+        <View style={styles.profileCircle}><Text style={styles.profileIcon}>◯</Text></View>
+      </View>
 
       <View style={styles.actionRow}>
         <Pressable style={styles.primaryAction} onPress={onNewRecipe}>
@@ -143,22 +199,39 @@ function HomeScreen({
         </Pressable>
       </View>
 
-      <SectionTitle title="Grocery List" action="View all" onPress={onGrocery} />
+      <SectionTitle title="Grocery List" action="Edit List →" onPress={onGrocery} />
       <Pressable style={styles.card} onPress={onGrocery}>
-        {groceryItems.slice(0, 4).map((item) => (
+        {groceryItems.slice(0, 6).map((item) => (
           <View key={item.id} style={styles.listRow}>
-            <View style={[styles.checkbox, item.completed && styles.checkboxChecked]} />
+            <View style={[styles.checkbox, item.completed && styles.checkboxChecked]}>
+              {item.completed && <Text style={styles.checkmark}>✓</Text>}
+            </View>
             <Text style={[styles.listText, item.completed && styles.completedText]}>{item.name}</Text>
           </View>
         ))}
+        {groceryItems.length > 6 && <Text style={styles.textLink}>More...</Text>}
         {groceryItems.length === 0 && <Text style={styles.muted}>Your grocery list is empty.</Text>}
       </Pressable>
 
-      <SectionTitle title="On The Menu" action="All recipes" onPress={onRecipes} />
-      <View style={styles.recipeGrid}>
-        {recipes.slice(0, 2).map((recipe) => (
-          <Pressable key={recipe.id} style={styles.recipeCard} onPress={() => onRecipe(recipe.id)}>
-            <View style={styles.imagePlaceholder}><Text style={styles.imagePlaceholderText}>Recipe Image</Text></View>
+      <SectionTitle title="On The Menu" action="All recipes →" onPress={onRecipes} />
+      <View style={styles.menuGrid}>
+        {menuRecipes.length === 0 && (
+          <View style={styles.card}>
+            <Text style={styles.muted}>Add a recipe to your menu to see it here.</Text>
+          </View>
+        )}
+        {menuRecipes.map((recipe) => (
+          <Pressable key={recipe.id} style={styles.menuRecipeCard} onPress={() => onRecipe(recipe.id)}>
+            <Pressable
+              hitSlop={10}
+              style={styles.menuCardRemove}
+              onPress={() => onRemoveMenu(recipe.id)}
+            >
+              <Text style={styles.menuCardRemoveText}>×</Text>
+            </Pressable>
+            <View style={styles.imagePlaceholder}>
+              <Text style={styles.imagePlaceholderText}>Recipe Image</Text>
+            </View>
             <Text style={styles.recipeName}>{recipe.name}</Text>
             <Text style={styles.muted}>{recipe.cookTime}</Text>
           </Pressable>
@@ -182,18 +255,45 @@ function RecipesScreen({
   onBack,
   onRecipe,
   onToggleFavorite,
+  onNewRecipe,
 }: {
   recipes: Recipe[];
   onBack: () => void;
   onRecipe: (id: string) => void;
   onToggleFavorite: (id: string) => void;
+  onNewRecipe: () => void;
 }) {
+  const [query, setQuery] = useState('');
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
+
+  const filteredRecipes = useMemo(() => {
+    const normalized = query.trim().toLowerCase();
+    return recipes.filter((recipe) => {
+      const matchesSearch = !normalized || recipe.name.toLowerCase().includes(normalized);
+      const matchesFavorite = !favoritesOnly || recipe.favorite;
+      return matchesSearch && matchesFavorite;
+    });
+  }, [recipes, query, favoritesOnly]);
+
   return (
     <View style={styles.flex}>
       <PageHeader title="Recipes" onBack={onBack} />
+      <View style={styles.searchRow}>
+        <TextInput
+          style={[styles.input, styles.searchInput]}
+          placeholder="Search recipes..."
+          value={query}
+          onChangeText={setQuery}
+        />
+        <Pressable
+          style={[styles.filterButton, favoritesOnly && styles.filterButtonActive]}
+          onPress={() => setFavoritesOnly((current) => !current)}
+        >
+          <Text style={favoritesOnly ? styles.filterTextActive : styles.filterText}>♥</Text>
+        </Pressable>
+      </View>
       <ScrollView contentContainerStyle={styles.pageCompact}>
-        <View style={styles.searchBox}><Text style={styles.muted}>Search recipes...</Text><Text>☰</Text></View>
-        {recipes.map((recipe) => (
+        {filteredRecipes.map((recipe) => (
           <Pressable key={recipe.id} style={styles.recipeListCard} onPress={() => onRecipe(recipe.id)}>
             <View style={styles.listImagePlaceholder}><Text style={styles.imagePlaceholderText}>Image</Text></View>
             <View style={styles.recipeListInfo}>
@@ -205,12 +305,24 @@ function RecipesScreen({
             </Pressable>
           </Pressable>
         ))}
+        {filteredRecipes.length === 0 && <Text style={styles.muted}>No recipes match your search.</Text>}
       </ScrollView>
+      <Pressable style={styles.floatingButton} onPress={onNewRecipe}><Text style={styles.floatingButtonText}>＋</Text></Pressable>
     </View>
   );
 }
 
-function RecipeDetailScreen({ recipe, onBack, onAddToGrocery }: { recipe: Recipe; onBack: () => void; onAddToGrocery: () => void }) {
+function RecipeDetailScreen({
+  recipe,
+  onBack,
+  onEdit,
+  onAddToMenu,
+}: {
+  recipe: Recipe;
+  onBack: () => void;
+  onEdit: () => void;
+  onAddToMenu: () => void;
+}) {
   return (
     <View style={styles.flex}>
       <PageHeader title="Recipe" onBack={onBack} />
@@ -218,8 +330,9 @@ function RecipeDetailScreen({ recipe, onBack, onAddToGrocery }: { recipe: Recipe
         <View style={styles.detailImage}><Text style={styles.imagePlaceholderText}>Recipe Image</Text></View>
         <Text style={styles.detailTitle}>{recipe.name}</Text>
         <Text style={styles.muted}>{recipe.cookTime}</Text>
-        <Pressable style={styles.fullButton} onPress={onAddToGrocery}>
-          <Text style={styles.fullButtonText}>Add Ingredients to Grocery List</Text>
+
+        <Pressable style={styles.fullButton} onPress={onAddToMenu}>
+          <Text style={styles.fullButtonText}>Add To The Menu</Text>
         </Pressable>
 
         <Text style={styles.sectionTitle}>Ingredients</Text>
@@ -236,37 +349,68 @@ function RecipeDetailScreen({ recipe, onBack, onAddToGrocery }: { recipe: Recipe
         {recipe.steps.map((step, index) => (
           <View key={step.id} style={styles.stepCard}>
             <View style={styles.stepNumber}><Text style={styles.stepNumberText}>{index + 1}</Text></View>
-            <Text style={styles.stepText}>{step.instruction}</Text>
+            <View style={styles.stepContent}>
+              <Text style={styles.stepText}>{step.instruction}</Text>
+              {step.photoUri && <View style={styles.stepPhotoPreview}><Text style={styles.imagePlaceholderText}>Step Photo</Text></View>}
+            </View>
           </View>
         ))}
+
+        <Pressable style={styles.editButton} onPress={onEdit}><Text style={styles.editButtonText}>Edit</Text></Pressable>
       </ScrollView>
     </View>
   );
 }
 
-function NewRecipeScreen({ onBack, onSave }: { onBack: () => void; onSave: (recipe: Recipe) => void }) {
-  const [name, setName] = useState('');
-  const [cookTime, setCookTime] = useState('');
-  const [ingredients, setIngredients] = useState([{ id: makeId(), name: '', quantity: '', unit: '' }]);
-  const [steps, setSteps] = useState([{ id: makeId(), instruction: '' }]);
+function RecipeEditorScreen({
+  mode,
+  recipe,
+  onBack,
+  onSave,
+  onDelete,
+}: {
+  mode: 'new' | 'edit';
+  recipe?: Recipe;
+  onBack: () => void;
+  onSave: (recipe: Recipe) => void;
+  onDelete?: () => void;
+}) {
+  const [name, setName] = useState(recipe?.name ?? '');
+  const [cookTime, setCookTime] = useState(recipe?.cookTime ?? '');
+  const [ingredients, setIngredients] = useState<Ingredient[]>(
+    recipe?.ingredients.map((item) => ({ ...item })) ?? [{ id: makeId(), name: '', quantity: '', unit: '' }],
+  );
+  const [steps, setSteps] = useState<RecipeStep[]>(
+    recipe?.steps.map((item) => ({ ...item })) ?? [{ id: makeId(), instruction: '' }],
+  );
 
   const save = () => {
     if (!name.trim()) return;
     onSave({
-      id: makeId(),
+      id: recipe?.id ?? makeId(),
       name: name.trim(),
       cookTime: cookTime.trim() || 'Time not set',
-      favorite: false,
+      favorite: recipe?.favorite ?? false,
+      onMenu: recipe?.onMenu,
       ingredients: ingredients.filter((item) => item.name.trim()),
       steps: steps.filter((item) => item.instruction.trim()),
     });
   };
 
+  const updateIngredient = (index: number, key: keyof Ingredient, value: string) => {
+    setIngredients((current) => current.map((item, i) => (i === index ? { ...item, [key]: value } : item)));
+  };
+
+  const updateStep = (index: number, instruction: string) => {
+    setSteps((current) => current.map((item, i) => (i === index ? { ...item, instruction } : item)));
+  };
+
   return (
     <View style={styles.flex}>
-      <PageHeader title="New Recipe" onBack={onBack} />
+      <PageHeader title={mode === 'new' ? 'New Recipe' : 'Edit Recipe'} onBack={onBack} />
       <ScrollView contentContainerStyle={styles.pageCompact} keyboardShouldPersistTaps="handled">
         <Pressable style={styles.detailImage}><Text style={styles.imagePlaceholderText}>＋ Add an Image</Text></Pressable>
+
         <Text style={styles.inputLabel}>Recipe Name</Text>
         <TextInput style={styles.input} placeholder="Recipe name" value={name} onChangeText={setName} />
         <Text style={styles.inputLabel}>Time</Text>
@@ -275,22 +419,59 @@ function NewRecipeScreen({ onBack, onSave }: { onBack: () => void; onSave: (reci
         <Text style={styles.sectionTitle}>Ingredients</Text>
         {ingredients.map((ingredient, index) => (
           <View key={ingredient.id} style={styles.ingredientInputs}>
-            <TextInput style={[styles.input, styles.quantityInput]} placeholder="Qty" value={ingredient.quantity} onChangeText={(value) => setIngredients((current) => current.map((item, i) => i === index ? { ...item, quantity: value } : item))} />
-            <TextInput style={[styles.input, styles.unitInput]} placeholder="Unit" value={ingredient.unit} onChangeText={(value) => setIngredients((current) => current.map((item, i) => i === index ? { ...item, unit: value } : item))} />
-            <TextInput style={[styles.input, styles.nameInput]} placeholder="Ingredient" value={ingredient.name} onChangeText={(value) => setIngredients((current) => current.map((item, i) => i === index ? { ...item, name: value } : item))} />
+            <TextInput style={[styles.input, styles.quantityInput]} placeholder="Qty" value={ingredient.quantity} onChangeText={(value) => updateIngredient(index, 'quantity', value)} />
+            <TextInput style={[styles.input, styles.unitInput]} placeholder="Unit" value={ingredient.unit} onChangeText={(value) => updateIngredient(index, 'unit', value)} />
+            <TextInput style={[styles.input, styles.nameInput]} placeholder="Ingredient" value={ingredient.name} onChangeText={(value) => updateIngredient(index, 'name', value)} />
           </View>
         ))}
-        <Pressable style={styles.outlineButton} onPress={() => setIngredients((current) => [...current, { id: makeId(), name: '', quantity: '', unit: '' }])}><Text>＋ Add Ingredient</Text></Pressable>
+        <Pressable style={styles.outlineButton} onPress={() => setIngredients((current) => [...current, { id: makeId(), name: '', quantity: '', unit: '' }])}>
+          <Text>＋ Add Ingredient</Text>
+        </Pressable>
 
         <Text style={styles.sectionTitle}>Instructions</Text>
         {steps.map((step, index) => (
-          <View key={step.id} style={styles.stepInputRow}>
-            <View style={styles.stepNumber}><Text style={styles.stepNumberText}>{index + 1}</Text></View>
-            <TextInput style={[styles.input, styles.stepInput]} placeholder="What happens in this step?" multiline value={step.instruction} onChangeText={(value) => setSteps((current) => current.map((item, i) => i === index ? { ...item, instruction: value } : item))} />
+          <View key={step.id} style={styles.stepEditorCard}>
+            <View style={styles.stepEditorTopRow}>
+              <View style={styles.stepNumber}><Text style={styles.stepNumberText}>{index + 1}</Text></View>
+              <TextInput
+                style={[styles.input, styles.stepInput]}
+                placeholder="What happens in this step?"
+                multiline
+                value={step.instruction}
+                onChangeText={(value) => updateStep(index, value)}
+              />
+            </View>
+            <View style={styles.stepEditorActions}>
+              <Pressable
+                style={styles.stepPhotoButton}
+                onPress={() =>
+                  setSteps((current) =>
+                    current.map((item, i) =>
+                      i === index ? { ...item, photoUri: item.photoUri ? undefined : 'placeholder' } : item,
+                    ),
+                  )
+                }
+              >
+                <Text style={styles.stepPhotoPlus}>＋</Text>
+                <Text style={styles.stepPhotoLabel}>{step.photoUri ? 'Photo Added' : 'Add Step Photo'}</Text>
+              </Pressable>
+              <Pressable style={styles.stepRemoveButton} onPress={() => setSteps((current) => current.filter((_, i) => i !== index))}>
+                <Text style={styles.deleteText}>×</Text>
+              </Pressable>
+            </View>
           </View>
         ))}
-        <Pressable style={styles.outlineButton} onPress={() => setSteps((current) => [...current, { id: makeId(), instruction: '' }])}><Text>＋ Add Step</Text></Pressable>
-        <Pressable style={styles.fullButton} onPress={save}><Text style={styles.fullButtonText}>Save Recipe</Text></Pressable>
+
+        <Pressable style={styles.outlineButton} onPress={() => setSteps((current) => [...current, { id: makeId(), instruction: '' }])}>
+          <Text>＋ Add Step</Text>
+        </Pressable>
+
+        <View style={styles.editorFooter}>
+          {mode === 'edit' && onDelete && (
+            <Pressable style={styles.deleteButton} onPress={onDelete}><Text style={styles.deleteButtonText}>Delete</Text></Pressable>
+          )}
+          <Pressable style={[styles.fullButton, styles.saveButton]} onPress={save}><Text style={styles.fullButtonText}>Save Recipe</Text></Pressable>
+        </View>
       </ScrollView>
     </View>
   );
@@ -315,14 +496,18 @@ function GroceryScreen({ items, onBack, onChange }: { items: GroceryItem[]; onBa
         </View>
         <View style={styles.card}>
           {items.map((item) => (
-            <Pressable key={item.id} style={styles.groceryRow} onPress={() => onChange(items.map((current) => current.id === item.id ? { ...current, completed: !current.completed } : current))}>
-              <View style={[styles.checkbox, item.completed && styles.checkboxChecked]} />
+            <View key={item.id} style={styles.groceryRow}>
+              <Pressable onPress={() => onChange(items.map((current) => current.id === item.id ? { ...current, completed: !current.completed } : current))}>
+                <View style={[styles.checkbox, item.completed && styles.checkboxChecked]}>
+                  {item.completed && <Text style={styles.checkmark}>✓</Text>}
+                </View>
+              </Pressable>
               <View style={styles.recipeListInfo}>
                 <Text style={[styles.listText, item.completed && styles.completedText]}>{item.name}</Text>
                 {(item.quantity || item.unit) && <Text style={styles.muted}>{item.quantity} {item.unit}</Text>}
               </View>
               <Pressable hitSlop={12} onPress={() => onChange(items.filter((current) => current.id !== item.id))}><Text style={styles.deleteText}>×</Text></Pressable>
-            </Pressable>
+            </View>
           ))}
           {items.length === 0 && <Text style={styles.muted}>Add something you need from the store.</Text>}
         </View>
@@ -334,61 +519,101 @@ function GroceryScreen({ items, onBack, onChange }: { items: GroceryItem[]; onBa
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#f6f6f3' },
   flex: { flex: 1 },
-  page: { paddingHorizontal: 22, paddingTop: 42, paddingBottom: 48 },
+  page: { paddingHorizontal: 22, paddingTop: 36, paddingBottom: 48 },
   pageCompact: { paddingHorizontal: 22, paddingBottom: 48 },
-  eyebrow: { fontSize: 12, fontWeight: '700', letterSpacing: 2, color: '#666', marginBottom: 8 },
-  heroTitle: { fontSize: 34, fontWeight: '800', color: '#191919' },
-  muted: { color: '#737373', fontSize: 14 },
-  actionRow: { flexDirection: 'row', gap: 12, marginTop: 28, marginBottom: 30 },
-  primaryAction: { flex: 1, minHeight: 118, backgroundColor: '#222', borderRadius: 18, padding: 18, justifyContent: 'space-between' },
-  secondaryAction: { flex: 1, minHeight: 118, backgroundColor: '#e5e5e1', borderRadius: 18, padding: 18, justifyContent: 'space-between' },
-  actionPlus: { fontSize: 26 },
-  primaryActionText: { color: '#fff', fontWeight: '700', fontSize: 17 },
-  secondaryActionText: { color: '#222', fontWeight: '700', fontSize: 17 },
-  sectionHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 10, marginBottom: 12 },
-  sectionTitle: { fontSize: 21, fontWeight: '800', color: '#202020', marginTop: 22, marginBottom: 12 },
-  textLink: { fontSize: 13, color: '#555', textDecorationLine: 'underline' },
-  card: { backgroundColor: '#fff', borderRadius: 18, padding: 18, marginBottom: 20 },
-  listRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 7 },
-  listText: { fontSize: 16, color: '#222' },
-  checkbox: { width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: '#777', marginRight: 12 },
-  checkboxChecked: { backgroundColor: '#777' },
-  completedText: { textDecorationLine: 'line-through', color: '#999' },
-  recipeGrid: { flexDirection: 'row', gap: 12 },
-  recipeCard: { flex: 1, backgroundColor: '#fff', borderRadius: 18, padding: 10 },
-  imagePlaceholder: { height: 105, backgroundColor: '#deded9', borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
-  imagePlaceholderText: { color: '#777', fontSize: 12 },
-  recipeName: { fontSize: 16, fontWeight: '700', color: '#222', marginBottom: 4 },
-  header: { height: 70, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+
+  header: { height: 64, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   backButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  backText: { fontSize: 38, lineHeight: 40, color: '#222' },
-  headerTitle: { fontSize: 19, fontWeight: '800' },
-  searchBox: { height: 52, borderRadius: 14, backgroundColor: '#fff', paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
-  recipeListCard: { backgroundColor: '#fff', borderRadius: 18, padding: 10, flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  listImagePlaceholder: { width: 76, height: 76, borderRadius: 12, backgroundColor: '#deded9', alignItems: 'center', justifyContent: 'center' },
-  recipeListInfo: { flex: 1, paddingHorizontal: 14 },
-  heart: { fontSize: 28, paddingHorizontal: 8 },
-  detailImage: { height: 220, backgroundColor: '#deded9', borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginBottom: 18 },
-  detailTitle: { fontSize: 30, fontWeight: '800', marginBottom: 4, color: '#202020' },
-  fullButton: { minHeight: 54, borderRadius: 15, backgroundColor: '#222', alignItems: 'center', justifyContent: 'center', marginTop: 20, paddingHorizontal: 16 },
-  fullButtonText: { color: '#fff', fontWeight: '700', fontSize: 15 },
-  ingredientRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 9, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#ddd' },
-  stepCard: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 18, padding: 16, marginBottom: 10, alignItems: 'flex-start' },
-  stepNumber: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#deded9', alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  stepNumberText: { fontWeight: '800' },
-  stepText: { flex: 1, lineHeight: 21, color: '#333' },
-  inputLabel: { fontSize: 13, fontWeight: '700', color: '#555', marginBottom: 7 },
-  input: { minHeight: 50, borderRadius: 13, backgroundColor: '#fff', paddingHorizontal: 14, fontSize: 15, marginBottom: 12 },
-  ingredientInputs: { flexDirection: 'row', gap: 7 },
-  quantityInput: { width: 65 },
-  unitInput: { width: 80 },
+  backText: { fontSize: 38, fontWeight: '300', color: '#222', marginTop: -4 },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: '#222' },
+
+  greetingCard: { backgroundColor: '#ececea', borderRadius: 18, padding: 18, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  heroTitle: { fontSize: 28, fontWeight: '800', color: '#191919', marginBottom: 4 },
+  muted: { color: '#737373', fontSize: 14 },
+  profileCircle: { width: 46, height: 46, borderRadius: 23, backgroundColor: '#d4d4d1', alignItems: 'center', justifyContent: 'center' },
+  profileIcon: { fontSize: 24, color: '#333' },
+
+  actionRow: { flexDirection: 'row', gap: 12, marginTop: 18, marginBottom: 6 },
+  primaryAction: { flex: 1, minHeight: 112, backgroundColor: '#222', borderRadius: 18, padding: 18, justifyContent: 'space-between' },
+  secondaryAction: { flex: 1, minHeight: 112, backgroundColor: '#e5e5e2', borderRadius: 18, padding: 18, justifyContent: 'space-between' },
+  actionPlus: { fontSize: 32, color: '#333' },
+  primaryActionText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  secondaryActionText: { color: '#222', fontWeight: '700', fontSize: 16 },
+
+  sectionHeading: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 18, marginBottom: 10 },
+  sectionTitle: { fontSize: 18, fontWeight: '800', color: '#222', marginTop: 18, marginBottom: 10 },
+  textLink: { fontSize: 13, fontWeight: '700', color: '#555' },
+
+  card: { backgroundColor: '#fff', borderRadius: 18, padding: 16, marginBottom: 8 },
+  listRow: { flexDirection: 'row', alignItems: 'center', minHeight: 30, gap: 10 },
+  listText: { color: '#222', fontSize: 15, fontWeight: '600' },
+  checkbox: { width: 19, height: 19, borderWidth: 1.5, borderColor: '#666', borderRadius: 4, alignItems: 'center', justifyContent: 'center' },
+  checkboxChecked: { backgroundColor: '#333', borderColor: '#333' },
+  checkmark: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  completedText: { textDecorationLine: 'line-through', color: '#999' },
+
+  menuGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  menuRecipeCard: { width: '48%', backgroundColor: '#fff', borderRadius: 18, padding: 12, position: 'relative' },
+  menuCardRemove: { position: 'absolute', top: 8, right: 8, zIndex: 2, width: 30, height: 30, borderRadius: 15, backgroundColor: '#e4e4e1', alignItems: 'center', justifyContent: 'center' },
+  menuCardRemoveText: { fontSize: 20, color: '#555', marginTop: -1 },
+  imagePlaceholder: { height: 86, borderRadius: 14, backgroundColor: '#ddd', alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+
+  searchRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 22, marginBottom: 12 },
+  searchInput: { flex: 1, marginBottom: 0 },
+  filterButton: { width: 52, height: 48, borderRadius: 14, backgroundColor: '#e5e5e2', alignItems: 'center', justifyContent: 'center' },
+  filterButtonActive: { backgroundColor: '#222' },
+  filterText: { fontSize: 20, color: '#333' },
+  filterTextActive: { fontSize: 20, color: '#fff' },
+
+  recipeListCard: { backgroundColor: '#fff', borderRadius: 18, padding: 12, marginBottom: 12, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  listImagePlaceholder: { width: 74, height: 74, borderRadius: 14, backgroundColor: '#ddd', alignItems: 'center', justifyContent: 'center' },
+  imagePlaceholderText: { color: '#666', fontSize: 12, fontWeight: '700', textAlign: 'center' },
+  recipeListInfo: { flex: 1 },
+  recipeName: { color: '#222', fontSize: 17, fontWeight: '800', marginBottom: 4 },
+  heart: { fontSize: 28, color: '#222' },
+  floatingButton: { position: 'absolute', right: 24, bottom: 28, width: 64, height: 64, borderRadius: 32, backgroundColor: '#222', alignItems: 'center', justifyContent: 'center' },
+  floatingButtonText: { color: '#fff', fontSize: 34, fontWeight: '300' },
+
+  detailImage: { height: 220, borderRadius: 18, backgroundColor: '#ddd', alignItems: 'center', justifyContent: 'center', marginBottom: 18 },
+  detailTitle: { fontSize: 28, fontWeight: '800', color: '#191919', marginBottom: 4 },
+  fullButton: { minHeight: 50, borderRadius: 14, backgroundColor: '#222', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18, marginTop: 18, marginBottom: 8 },
+  fullButtonText: { color: '#fff', fontSize: 15, fontWeight: '800' },
+  ingredientRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', minHeight: 38, borderBottomWidth: 1, borderBottomColor: '#eee' },
+
+  stepCard: { backgroundColor: '#fff', borderRadius: 18, padding: 14, marginBottom: 12, flexDirection: 'row', gap: 12 },
+  stepNumber: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#ddd', alignItems: 'center', justifyContent: 'center' },
+  stepNumberText: { fontWeight: '800', color: '#333' },
+  stepContent: { flex: 1 },
+  stepText: { fontSize: 14, color: '#333', lineHeight: 20 },
+  stepPhotoPreview: { height: 90, marginTop: 10, borderRadius: 12, backgroundColor: '#e7e7e4', alignItems: 'center', justifyContent: 'center' },
+  editButton: { minHeight: 48, borderRadius: 14, backgroundColor: '#d8d8d5', alignItems: 'center', justifyContent: 'center', marginTop: 8 },
+  editButtonText: { color: '#222', fontWeight: '800', fontSize: 15 },
+
+  inputLabel: { fontWeight: '800', color: '#333', marginBottom: 6, marginTop: 4 },
+  input: { minHeight: 48, backgroundColor: '#fff', borderRadius: 14, paddingHorizontal: 14, color: '#222', marginBottom: 12 },
+  ingredientInputs: { flexDirection: 'row', gap: 8 },
+  quantityInput: { width: 70 },
+  unitInput: { width: 82 },
   nameInput: { flex: 1 },
-  outlineButton: { minHeight: 48, borderRadius: 13, borderWidth: 1, borderColor: '#aaa', alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
-  stepInputRow: { flexDirection: 'row', alignItems: 'flex-start' },
-  stepInput: { flex: 1, minHeight: 90, paddingTop: 14, textAlignVertical: 'top' },
-  addItemRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
+  outlineButton: { minHeight: 48, borderWidth: 1.5, borderColor: '#bbb', borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+
+  stepEditorCard: { backgroundColor: '#fff', borderRadius: 18, padding: 14, marginBottom: 12 },
+  stepEditorTopRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
+  stepInput: { flex: 1, minHeight: 100, textAlignVertical: 'top', marginBottom: 0 },
+  stepEditorActions: { flexDirection: 'row', gap: 10, marginTop: 12 },
+  stepPhotoButton: { flex: 1, minHeight: 72, borderWidth: 1.5, borderStyle: 'dashed', borderColor: '#888', borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  stepPhotoPlus: { fontSize: 26, color: '#444' },
+  stepPhotoLabel: { fontSize: 12, fontWeight: '700', color: '#555' },
+  stepRemoveButton: { width: 54, minHeight: 72, backgroundColor: '#eee', borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  deleteText: { fontSize: 26, color: '#666' },
+
+  editorFooter: { flexDirection: 'row', gap: 10, marginTop: 6 },
+  deleteButton: { flex: 1, minHeight: 50, borderRadius: 14, backgroundColor: '#d8d8d5', alignItems: 'center', justifyContent: 'center', marginTop: 18 },
+  deleteButtonText: { color: '#222', fontWeight: '800' },
+  saveButton: { flex: 1 },
+
+  addItemRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
   addItemInput: { flex: 1, marginBottom: 0 },
-  smallButton: { width: 72, borderRadius: 13, backgroundColor: '#222', alignItems: 'center', justifyContent: 'center' },
-  groceryRow: { minHeight: 58, flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#ddd' },
-  deleteText: { fontSize: 28, color: '#777', paddingHorizontal: 6 },
+  smallButton: { minWidth: 70, minHeight: 48, borderRadius: 14, backgroundColor: '#222', alignItems: 'center', justifyContent: 'center' },
+  groceryRow: { minHeight: 52, flexDirection: 'row', alignItems: 'center', gap: 12, borderBottomWidth: 1, borderBottomColor: '#eee' },
 });

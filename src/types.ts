@@ -8,6 +8,7 @@ export type Ingredient = {
 export type RecipeStep = {
   id: string;
   instruction: string;
+  photoUri?: string;
 };
 
 export type Recipe = {
@@ -15,6 +16,7 @@ export type Recipe = {
   name: string;
   cookTime: string;
   favorite: boolean;
+  onMenu?: boolean;
   ingredients: Ingredient[];
   steps: RecipeStep[];
 };
@@ -28,4 +30,10 @@ export type GroceryItem = {
   recipeId?: string;
 };
 
-export type ScreenName = 'home' | 'recipes' | 'recipe-detail' | 'new-recipe' | 'grocery';
+export type ScreenName =
+  | 'home'
+  | 'recipes'
+  | 'recipe-detail'
+  | 'recipe-edit'
+  | 'new-recipe'
+  | 'grocery';
